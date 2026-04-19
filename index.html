@@ -367,6 +367,8 @@ textarea.fi{min-height:90px;resize:none;font-size:14px;line-height:1.6;}
     </div>
     <div class="sec-label">防守板塊</div>
     <div class="bucket-row" id="bucketCards"></div>
+    <div class="sec-label">今日飲食</div>
+    <div id="todayBar"></div>
     <div class="sec-label">本月概覽</div>
     <div class="month-bar" id="monthBar"></div>
     <div class="sec-label">最近記錄</div>
@@ -716,6 +718,27 @@ function addTx(){
   document.getElementById('txAmt').value='';document.getElementById('txDesc').value='';
   selTag=null;renderAll();toast(`記錄 ${fmtN(a)}${dt!==todayStr()?' ↩ 補記':''}`);}
 
+// ── TODAY BAR ──
+function renderTodayBar(){
+  const today=todayStr();
+  const dow=new Date().getDay(); // 0=Sun,6=Sat
+  const isWeekend=(dow===0||dow===6);
+  const limit=isWeekend?400:300;
+  const todayTotal=txs.filter(t=>t.d===today&&t.a>0).reduce((s,t)=>s+t.a,0);
+  const pct=Math.min(100,(todayTotal/limit)*100);
+  const over=todayTotal>limit;
+  const barColor=over?'var(--red)':pct>80?'var(--yel)':'var(--grn)';
+  const dayLabel=isWeekend?'假日上限':'平日上限';
+  document.getElementById('todayBar').innerHTML=`
+    <div class="card" style="padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+        <div style="font-family:var(--mono);font-size:22px;font-weight:500;color:${over?'var(--red)':'var(--ink)'};">${fmtN(todayTotal)}</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--ink3);">${dayLabel} ${fmtN(limit)}${over?` · <span style="color:var(--red)">超支 ${fmtN(todayTotal-limit)}</span>`:''}</div>
+      </div>
+      <div class="bc-bar"><div class="bc-fill" style="width:${pct.toFixed(1)}%;background:${barColor};transition:width .5s ease;"></div></div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:6px;">${over?'已超支':'剩餘 '+fmtN(limit-todayTotal)} · ${new Date().toLocaleDateString('zh-TW',{weekday:'short'})}</div>
+    </div>`;}
+
 // ── MONTH BAR ──
 function renderMonthBar(){
   const mon=curMon(),days=Math.max(1,new Date().getDate());
@@ -734,14 +757,27 @@ function renderPie(){
   if(!cats.length){pieEl.style.display='none';return;}
   pieEl.style.display='block';
   const colors=['#8C3042','#3D6B4A','#B8941A','#C0784A','#5A7B9C','#8B5E8C','#4A7B7B','#9C7B3A','#6B4A7B','#7B8C3A'];
+  const total=cats.reduce((s,c)=>s+catMap[c],0);
   if(pieChart)pieChart.destroy();
   const ctx=document.getElementById('pieChart').getContext('2d');
   pieChart=new Chart(ctx,{
     type:'doughnut',
     data:{labels:cats,datasets:[{data:cats.map(c=>catMap[c]),backgroundColor:colors,borderWidth:1.5,borderColor:'#F8F6F0',hoverOffset:4}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{
-      legend:{position:'right',labels:{color:'#555',font:{family:'DM Mono',size:11},boxWidth:10,padding:8}},
-      tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmtN(ctx.raw)}`}}
+      legend:{position:'right',labels:{color:'#555',font:{family:'DM Mono',size:11},boxWidth:10,padding:8,
+        generateLabels:chart=>{
+          const ds=chart.data.datasets[0];
+          return chart.data.labels.map((label,i)=>{
+            const val=ds.data[i];
+            const pct=total>0?Math.round(val/total*100):0;
+            return{text:`${label} ${pct}%`,fillStyle:ds.backgroundColor[i],strokeStyle:'#F8F6F0',lineWidth:1.5,index:i,hidden:false};
+          });
+        }
+      }},
+      tooltip:{callbacks:{label:ctx=>{
+        const pct=total>0?Math.round(ctx.raw/total*100):0;
+        return ` ${ctx.label}: ${fmtN(ctx.raw)} (${pct}%)`;
+      }}}
     },cutout:'52%'}
   });}
 
@@ -1100,7 +1136,7 @@ function applyBonus(){cfg.bonusMon=curMon();D.save('ff_cfg',cfg);closeModal('bon
 // ── MODALS ──
 function openModal(id){document.getElementById(id).classList.add('show');}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
-function renderAll(){renderHeader();renderBuckets();renderTags();renderMonthBar();renderRecent();}
+function renderAll(){renderHeader();renderBuckets();renderTags();renderTodayBar();renderMonthBar();renderRecent();}
 
 // ── INIT ──
 document.addEventListener('DOMContentLoaded',()=>{
